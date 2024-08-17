@@ -1,0 +1,1362 @@
+---
+title: "ST 552 Final Report"
+author: "Chloe Drummond"
+date: "2022-11-25"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "F:/ST 552/Data")
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+```
+
+## Abstract
+
+The purpose of this analysis is to predict a song's popularity based on specific attributes. This data has been sourced from Kaggle.com. The link to the specific data set is in the Appendix. The data includes data pulled from spotify's API and has been compiled into one large dataset with 19 variables. This analysis focuses on multiple linear regression for the model building. After the analysis, the final model includes 17 total predictors with 12 main effect terms and 5 interaction terms. The prediction RSE is around 0.58 and has an R-squared value of around 0.12.
+
+## Introduction
+
+The purpose of this analysis is to see what song attributes have the biggest effect on the popularity of said song. For context I will explain each of the variables for a better understanding. For a further breakdown of the variables in this analysis and others that could be added on to an analysis in the future please refer to the Spotify API for developers. It is also referenced in the works cited. The variables in the dataset from kaggle included popularity which ranges from 0-100 and in an integer value and it is our target variable in this analysis. Next is acousticness, spotify API says acousticness is a numeric variable that is a "confidence measure from 0.0 to 1.0 of whether the track is acoustic. 1.0 represents high confidence the track is acoustic." Artists shows the artists that produced the song, the name of which is found in the name variable. Danceability is next, and it is a numeric variable as well described as " how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. A value of 0.0 is least danceable and 1.0 is most danceable." Duration_ms is the length of the track in miliseconds. Energy is numeric and represents a perceptual measure of intensity and activity. Typically, energetic tracks feel fast, loud, and noisy. Death metal, for example, has a lot of energy, whereas a Bach prelude has a low energy level. Dynamic range, perceived loudness, timbre, onset rate, and general entropy are all perceptual features that contribute to this attribute. Energy ranges from 0 to 1. Explicit, key, and mode are the categorical varibles that are in the initial dataset. Please see the plots in the Appendix or the 12 Keys of music or the pitch class sources to better understand the keys variable. ID is a unique code assigned for each track. Spotify describes Instrumentalness as a variable that "Predicts whether a track contains no vocals."Ooh" and "aah" sounds are treated as instrumental in this context. Rap or spoken word tracks are clearly "vocal". The closer the instrumentalness value is to 1.0, the greater likelihood the track contains no vocal content. Values above 0.5 are intended to represent instrumental tracks, but confidence is higher as the value approaches 1.0." Liveness is numeric and detects the presence of a live audience in the track. Higher liveness means a stronger likelihood that the track was live, and it ranges also from 0-1. Loudness is exactly how it sounds, it measures the loudness of a track in decibels, and its values are around -60 to 0 db. Mode indicates whether the song is in a major scale or minor scale. Major is 1, minor is 0. Release_date is the date the song was released. It has varying format as well. Speechiness is next and spotify tells us that "Speechiness detects the presence of spoken words in a track. The more exclusively speech-like the recording (e.g. talk show, audio book, poetry), the closer to 1.0 the attribute value. Values above 0.66 describe tracks that are probably made entirely of spoken words. Values between 0.33 and 0.66 describe tracks that may contain both music and speech, either in sections or layered, including such cases as rap music. Values below 0.33 most likely represent music and other non-speech-like tracks.". Tempo is the tracks overall bpm over the entire track, so it is esstentially the average speed of the track in beats per minute. Valence is spotify's way to describe the "musical positiveness conveyed by a track". The higher the valence the more positive the track and valence ranges from 0-1.
+
+The purpose of my analysis was to see if I could build a multiple linear regression model to predict popularity of a song based on its other features. This could be useful especially for record producers that want to use the model to see if they can find the next big song or star based on the attributes and features a song has. I first had to clean the data as there were some issues with the dataset right off the bat. Then after data cleaning I moved to the model building steps where I split the data into a training and test set and then I plotted the interactions between the numerical and categorical variables. I also found the model variance inflation factors and removed energy from the analysis. I also transformed both the response variable, popularity and I transformed Instrumentalness. I tested multiple different transformations on multiple variables to help remedy some the assumption issues my model has and found that while not perfect, a square-root transformation on both popularity and instrumentalness works the best to improve model fit. Then after the model building, I moved on to variable selection. I ran forward, backwards, and stepwise selections with both AIC and BIC criterion. I found that the best model with an AIC of -14700.81 and an R-squared value of 0.1305 to be the best and final model as it was the model with the best fit statistics and lowest AIC or BIC of all the models. Then with the final model I put the test data set through it and got back an r-squared of 0.1217, adjusted r-squared of 0.1149 and an rse of 0.5815.
+
+## Methods
+
+### Cleaning of the data
+
+First I read in the following libraries, `stringr, rsample, corrplot, ggplot2, car,glmet, moments, bestNormalize`. Then I read in the dataset into the dataframe spotifydataraw. Then to make the artists variable more readable I removed the square brackets. Then I checked to see if any observations in the dataset were duplicated. By looking at table 1 I could see that there are no duplicated observations. I also checked a summary of the data and found an issue right away with Tempo. First I removed variables that were not of interest to the analysis. For right now the only variable I will be removing is ID. This subset is extracted into the dataframe `spotifydata`. The summary of tempo shows that there are some observations with a tempo of 0 which is impossible for a song to be 0 bpm so I removed all observations that had a tempo equal to 0 and updated `spotifydata`. Then I wanted to see if specific tracks were duplicated, meaning observations matched both the track name and the artist(s). I found that 13301 observations in the data set were the same song. I kept The first encountered observation of those repeated in the unique Spotify data set. Meaning `uniquespotifydata` is the set of all tracks just once.
+
+Then I wanted to see of release date was any different information than year provided. Using the `substr` function I extracted the year from release date and then compared it to year to see if there were any observations that differed. Looking at Table 2 in the appendix it shows that there are no unique observations that have differing release_date years and the year it made the chart. So knowing that I removed the variable release_date in `uniquespotifydata` Looking at Year and taking into account the target audience my model aims to assist, I knew that the more recent years would be the areas of interest as most record producers are going to be trying to find newer artists or newer songs that follow the trend from the current trend. With this I updated `uniquespotifydata` to include a new variable `yearbins` whichs splits the data into two groups, those tracks released before 2010 and those released in 2010 or after. Then I removed those that were released before 2010 and removed `yearbins` as it was no longer of use. Now I check the response variable popularity. Looking at histogram 2 and table 4 in the appendix its clear that a large amount of the observations had a popularity of 0. According to the information from the kaggle dataset page, these songs all made the top 100 atleast one year. I believe that a population of zero wouldn't have been very illustrative of the analysis I was focusing on so I removed them to focus on songs with a popularity of atleast 1. This is `spotifyminpop`. Looking at the histogram 3 and table 5 in the appendix its clear that popularity is much more normally distributed. Then I need to do something artists to make it meaningful. Instead of trying to make it a factor with artist names as the levels, which I knew would be massive and very difficult to interpret accurately, I wanted to make use of the fact that some songs have more than one artist producing them. Does collaboration in turn behind the scenes make a song more popular? I checked for a "\`," in the artists column which was the indicator that there was more than one artist and then coded a 1 if there was more than one artist and 0 if there was just one. This was assigned as morethan1artist. I bounded it to spotifyminpopart. Then to make duration_ms easier to interpret I made it into how long the song lasted in minutes by dividing by 60000. This gives us durationmin which I bound to spotifyminpopart to make spotifyminpopartdur and then removed duration_ms. Now I need to fix the structure of the categorical predictors. I conveniently place the factor variables together in the dataframe to make it easier to keep track of. Now I want to see the overview of my categorical variables, key, morethan1artist, explicit, and mode are distributed against popularity. Please see boxplots 1-4 in the appendix. After evaluating the boxplots I subsetted the data to only include songs that had an instrumental score of 0.5 or less so I could focus on songs that a record producer would be analyzing, this also exposed many songs that were not actually songs. Which leads me to my next step which is the Removal of non applicable songs. Unfortunately there wasnt a simple way for me to filter out all of these songs that were like brown noise and rain sounds. Most of them has fairly normal numbers for their variables but usually they had at least one extreme case in one variable. But of course that also wasnt always the case in the reverse so I did searches for keywords like sleep, nature, noise, rain, sound, lullaby, and relax, and then combed through the searches by hand to remove the observations that did not belong in the analysis. After this I moved to outlier removal. Now I want to evaluate an initial model to see if there are any outliers that can be removed. Since the model is still relatively large I felt ok about removing what the outlierTest function told me along with points that were flagged in the residuals vs leverage plot. I did 5 rounds of outlier removal and ended with a final model shown by `modeloutlier5` in the Appendix under Outlier Removal Final. Now that the outliers have been removed I wanted to remove some of the overly influental points that were affecting the model. The code, plots and output for this can be found in the Appendix under Influential Point Removal. This point removal is done using the function `influencePlot` and also by evaluating the plots of the models as well. I chose to remove the point if the studentized residual was over 0.5 and if when it was removed the model fit increased. This led to five rounds of removals of influential points to improve the fit noise of the data. Each round has been separated in the Appendix so the plots can be examined by each model easier. The final data frame of the removed data is shown under Infuential Point Removal Final titled `spotifyremoved`. This was the final step of my data cleaning process. To prep for the model training steps that follow I split the data into a training and test set. I chose to split 65/35 which is a bit against convention. After observing the data for the cleaning I could tell that I was going to want a larger test set than 30% but 40% seemed to close to a 50/50 match and I knew I wanted to give the model as much data as I could to ensure I got decently predictive model. With this predicament I chose to go down the middle with a 35/65 split. This split gives `spotifytraining` and `spotify_test` and can be found in the Appendix under Data Split into Training and Test Data.
+
+### Model Building
+
+The first thing I did in the model building process was to check the correlation of my numerical variables, `popularity`, `durationmin`, `tempo`, `loudness`, `acousticness`, `danceability`, `energy`, `instrumentalness`, `valence`, `liveness`, and `speechiness`. This is seen in the Appendix under Correlation Plot. Looking at the plot we can see that energy is highly correlated with both loudness and acousticness. It has a positive correlation with loudness and a negative correlation with acousticness. Acousticness also appears to be correlated with loudness. Knowing that we have some correlation within my predictors I need to check the variance inflation factors to see which variable can be accounted for by the other predictors. This is my next step in my model building. In the Appendix under the Variance Inflation, I started with an initial model `modelvif1` using the training data. Then I checked the model's variance inflation factors using the `vif` function. It showed that energy was accounted in the model by two other variables so I chose to remove energy first. The other option that had a high VIF was loudness but it was not as high as energy so I still went with energy first. I removed energy from the model in `modelvif2`. By comparing the output with energy and without energy it seems like the removal of energy hurts the model fit but when we look again at the VIF of the new model it seems like the multicollinearity has been settled by removing energy so I will go to the next step of the model building without including energy in the analysis. The next step in the model building was to check to see if any predictors had interactions with any of the categorical predictors in my model. I did this by examining the interaction plots of all predictors against popularity and plotted the best fit lines of each level in the interaction variable. These plots can be found in the Appendix in the Interaction Plots Section. I also included commentary on each of the plots on if it showed a presence of an an interaction or not. The interactions that I could exclude from the full interaction model based on the information from the interaction plots are tempo:mode, loudness:mode, acousticness:explicit, acousticness:morethan1artist, danceability:explicit, danceability:morethan1artist and valence:explicit. This leads us to the next step of the model building process, interaction term removal. The full interaction model can be found in the Appendix under Interaction Terms in the first section Full Interaction Start. There also is the summary output and the four model plots looking at the Multiple R-squared and Adjusted R-squared of this model compared to those in the model before the interactions we see the interactions have greatly helped the model fit improve however we can see that some of the interactions are not significant. This leads to the sequential interaction term removals that follow Full Interaction Start in the Appendix. We end on `modelinteraction10` as the next interactions that are not significant, durationmin:explicit, tempo:morethan1artist, and instrumentalness:morethan1artist actually hurt the model when removed instead of improving the fit. When I tried to remove each of the interactions individually the R-squared values, both the Multiple and Adjusted, decreased and the RSE also increased instead of decreasing. So while the model is displaying the interaction as insignificant I chose to keep them as I wanted to also have a maximal model before I went to variable selection. Looking at the model plots, it does seem like the fit has improved as the normality plot has become more linear than it was and the residuals/leverage plot line is now more straight and same things with the Residuals vs fitted plot line. So I moved to the next step in the model building, transformations. Transformations in this model are very limited as most of the plots I felt fairly ok with. The issue in the plots appears in most clearly in the normal Q-Q plot. The line mostly fits the line except for the lower tail around -2 standardized residuals and then even less of a deviation around 3 standardized residuals. The other issue is shown in the Residuals vs fitted plot. This leads me to my first transformation. The plot of the fitted values looks curved at the lower fitted values so I applied a square-root transformation to popularity and ran the model. Shown in the Appendix in the Transformations section in the Popularity section. Looking at the model fit statistics, both R-squared values increased and the RSE also decreased. Looking at the model plots as well and looking at the range of my remaining variables I chose to also take the square root of the variable instrumentalness. It ranges from 0 to 0.5 with many more 0s than other values. I chose to take a square root as I wanted to rein in the upper values of the stop transformations here. Some of my variables like loudness include a majority of negative values but that implies a quiet song so I didnt want to change the sign, also most of the distributions against popularity were clusters more than spread points so it was hard to see any pattern that could transformable. Maybe with further experience I could explore this further. With this I move to the next step of model building, Variable selection. All variable selection models can be found in the Appendix labeled with the type of selection and also then by criterion. From the fit statistics found from each selection process, it seems like the AIC criterion provides a better fit than the BIC criterion offers. There were two models with the same lowest AIC score, the stepwise and backwards AIC selection. They both gave an AIC of -14700.81, however the stepwise AIC model gave just slightly high R-squared values and a smaller RSE so I chose the stepwise AIC model as my final model for this analysis. After that I moved to testing the model. I tested my model by using the same variables as the model gave out but instead used the test data on the model. It gave me an R-squared of 0.1217, an adjusted R-squared of 0.1149, and an RSE of 0.5815.
+
+## Results
+
+    The final model includes 12 main effects and 5 interaction terms for a total of 17 predictors. Both Speechiness and loudness main effects are marked as not significant however their interaction terms are significant so they are included in the final model. The variables and coefficients for each variable included in the final model can be found in the Appendix under Stepwise in AIC. Most of the coefficients in the model don't exceed 1 except for the intercept which is only at 7.75 which suggests that little changes in the input numbers shouldn't change the popularity as drastically.   
+
+The final model tested on the test set gave a result that was to be expected. The residual standard error increased since my model might have been slightly overfitted to the training data. This would of course cause greater residuals and thus an increase in the residual standard error. From the training to test data the multiple R-squared dropped from 0.13 to 0.122, and the adjusted r-squared dropped also from 0.1265 to 0.1149. This again makes sense since the model was fitted around the training data and when introduced to the test data it is not able to account for the extremities in the test set that may have been pruned out of the training data during model building or variable selection. Also the model fit in general is quite low for both the training and testing models. Looking at the plots its clear that some regression assumptions are still slightly violated. The Normal Q-Q plots shows that the standardized residuals stray from the linear line at the ends of the residuals. For standardized residuals below -2 the model is wanting the values to be lower than what they actually are. For standardized residuals above 2 the model does the opposite and wants the points to be higher than they actually are. The Residuals vs Fitted plot also is not randomly spread. It is fairly even around 0 except for fitted values between 6.5 and 7.0. The line on the graph no longer is straight and instead a negative slope appears. Since popularity (my target variable) is an integer variable instead of a continuous variable some of this issue might extend from that as well. We can see some evidence of this possible being an issue in the scale-location plot as well as an unusual pattern emerges. The residual vs leverage plot also shows an issue with the data as the points are mainly clustered around 0 leverage but there are a handfull of points not within the cluster that are relatively randomly spread but are slightly sloped down.
+
+## Conclusion and Discussion
+
+In conclusion, the multiple linear regression model I've developed might not be the best model to predict popularity. While the model is okay its still not fantastic. The assumptions that were violated as shown in the plots mentioned earlier in the results need to be fixed to be able to provide a model that could be suggestible. With more time and experience in transformations I hopefully could fix the assumption of linearity a little better than I did here. Also with further knowledge and experience in model building I would like to see if I could make a more robust model that could be resistant to outliers more than this model is. Also with more time it would be interesting to see how this model could be shifted to focus on popularity of tracks in a persons specific playlist. That way it could be implemented as a "this is what you like the most:danceability" on spotify to allow users to be more acquainted with the complexities of music. With more knowledge in R as well it would be interesting to see how other types of models that are not regression model the data and see if any other model provides a better fit. Since the regression model run here did not provide a great model fit I would recommend refitting with new transformations or try a different type of model like a neural network or decision tree before using the model in any real application.\
+## Appendix
+
+#### Libraries and data read in and duplicated observation check
+##### Table 1 Duplicated Observations
+```{r echo=c(16,17), message=FALSE, warning=FALSE}
+library(stringr)
+library(rsample)
+library(corrplot)
+library(ggplot2)
+library(car)
+library(glmnet)
+library(moments)
+library(bestNormalize)
+library(dplyr)
+library(stats)
+library(interactions)
+
+spotifydataraw <- read.csv("data.csv", header = TRUE)
+
+spotifydataraw$artists <- str_replace_all(spotifydataraw$artists, "\\[|\\]", "")
+table(duplicated(spotifydataraw))
+summary(spotifydataraw)
+```
+#### Removal of ID.
+```{r echo=FALSE}
+spotifydata <- subset(spotifydataraw, select = c(popularity, name, artists, duration_ms, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, year, key, release_date, mode, explicit))
+```
+
+#### Removal of tempo = 0
+```{r echo=FALSE}
+spotifydata <- subset(spotifydataraw, spotifydataraw$tempo != 0.0)
+```
+
+#### Separation of unique and duplicated songs
+```{r echo= c(2,3)}
+duplicatedsongandartist <- subset(spotifydata, duplicated(spotifydata[,2:3],data = spotifytraining) == TRUE) # 13301 observations in the data set were repeated
+
+uniquespotifydata <- subset(spotifydata, duplicated(spotifydata[,2:3],data = spotifytraining) == FALSE)
+
+uniquespotifydata <- subset(uniquespotifydata, select = c(popularity, name, artists, duration_ms, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, year, key, release_date, mode, explicit))
+```
+
+#### Release_date year check
+##### Table 2
+```{r echo=c(2)}
+releaseyr <- substr(uniquespotifydata$release_date, 1,4)
+
+table(uniquespotifydata$year == releaseyr)
+
+uniquespotifydata <- subset(uniquespotifydata, select = c(popularity, artists, name,  duration_ms, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, year, key, mode, explicit))
+```
+
+#### Year visualization
+##### Histogram 1
+```{r echo=FALSE}
+hist(uniquespotifydata$year)
+```
+
+#### Year grouping
+##### Table 3
+```{r echo=FALSE}
+breaks <- c(1921, 2009,2021)
+tags <- c("before 2010","Recent 10 years")
+
+yearbins <- cut(uniquespotifydata$year,
+                breaks = breaks,
+                include.lowest = TRUE,
+                right = FALSE,
+                labels = tags)
+summary(yearbins)
+
+uniquespotifydata <- cbind(uniquespotifydata, yearbins)
+uniquespotifydata <- subset(uniquespotifydata, select = c(popularity, name, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, key, mode, explicit, duration_ms, artists, yearbins))
+## we removed year it is now redundant with yearbins
+
+uniquespotifydata <- subset(uniquespotifydata, uniquespotifydata$yearbins == 'Recent 10 years')
+```
+
+#### Popularity visualization
+##### Histogram 2 and Histogram 3
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+hist(uniquespotifydata$popularity, main = "popularity with 0")
+
+spotifyminpop <- subset(uniquespotifydata, uniquespotifydata$popularity != 0)
+
+hist(spotifyminpop$popularity, main = "popularity w/o 0")
+par(mfrow=c(1,1))
+```
+
+#### Creation of Morethan1artist
+```{r echo= FALSE}
+spotifyminpop$morethan1artist <- ifelse(grepl("',", spotifyminpop$artists), 1, 0)
+
+#doing this allows us to remove the artists column in place of morethan1artist col
+spotifyminpopart <- subset(spotifyminpop, select = c(popularity,artists,name, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, key, mode, explicit, duration_ms, morethan1artist))
+```
+#### Creation of Durationmin and Structure change to Factor for Categorical Variables
+```{r echo=FALSE}
+spotifyminpopart$durationmin <- spotifyminpopart$duration_ms/60000
+
+spotifyminpopartdur <- subset(spotifyminpopart, select = c(popularity, artists,name, durationmin, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, key, mode, explicit, morethan1artist))
+
+spotifyminpopartdur[14:17] <- lapply(spotifyminpopartdur[14:17], factor)
+spotifyminpopartdur$rownames <- as.numeric(row.names(spotifyminpopartdur))
+```
+
+
+#### Categorical distribution Visualization
+##### Boxplots 1-4
+```{r echo=FALSE}
+par(mfrow=c(1,2))
+boxplot(spotifyminpopartdur$popularity~spotifyminpopartdur$key)
+# key seems pretty random around popularity. 
+boxplot(spotifyminpopartdur$popularity~spotifyminpopartdur$morethan1artist)
+## decently even between the levels smaller IQR in 0 than in 1 with values outside of the upper limit. This could show that the majority of single artist songs are around the middle range of popularity except for a few highly popular songs that are far above the other single artist songs
+boxplot(spotifyminpopartdur$popularity~spotifyminpopartdur$explicit)
+## it seems that songs that are explicit are more popular than the nonexplicit songs
+boxplot(spotifyminpopartdur$popularity~spotifyminpopartdur$mode)
+## mode is fairly equal in popularity, major is just slightly more popular.
+par(mfrow=c(1,1))
+```
+
+#### Instrumentalness
+Removal of tracks that had a higher instrumentalness than 0.5
+```{r echo=FALSE}
+spotifyminpopartdurins <- subset(spotifyminpopartdur, spotifyminpopartdur$instrumentalness < 0.5)
+```
+
+#### Removal of non applicable songs
+Used searches on sleep, nature, noise, rain, sound, lullaby, and relax
+```{r echo=FALSE}
+songsapplicable <- subset(spotifyminpopartdurins, !(spotifyminpopartdurins$rownames %in% c(16013,31617,39615,47470,69973,70142,106750,125633))) ##sleep search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(39291,47470,96849,115837,151936)))##removed nature search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(39615,69973,106750,126005,152513)))## noise search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(47470,54512,96849,143935)))##rain search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(15904,31617,39291,39615,47470,47744,70000,96849,115837,125633,125828,151936,152513)))##sound search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(15373,77532,70122,70142)))##lullaby search on spotifyminpopartdurins
+songsapplicable <- subset(songsapplicable, !(songsapplicable$rownames %in% c(62968)))##relax search on songsapplicable
+
+spotifysongapplicable <- songsapplicable
+```
+
+#### Initial Outlier Removal
+
+```{r echo=c(11)}
+spotifysongapplicable$rownames <- as.numeric(row.names(spotifysongapplicable))
+
+attach(spotifysongapplicable)
+
+modelrough <- lm(popularity~ durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable)
+summary(modelrough)$adj.r.sq
+summary(modelrough)$r.sq 
+sqrt(deviance(modelrough)/df.residual(modelrough))
+par(mfrow=c(2,2))
+plot(modelrough)
+par(mfrow=c(1,1))
+
+outlierroughtest <- outlierTest(modelrough)
+outlierroughtest$bonf.p   #11
+outlierrough <- as.numeric(names(outlierTest(modelrough)$bonf.p))
+outlierrough[11:13]<-c(77722, 125474, 55655)
+
+spotifysongapplicable1 <- subset(spotifysongapplicable, !(spotifysongapplicable$rownames %in% outlierrough))
+detach(spotifysongapplicable)
+```
+
+#### Outlier Removal round 2
+
+```{r echo=FALSE}
+attach(spotifysongapplicable1)
+modeloutlier1 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable1)
+
+summary(modeloutlier1)$r.sq
+summary(modeloutlier1)$adj.r.sq
+sqrt(deviance(modeloutlier1)/df.residual(modeloutlier1))
+
+par(mfrow=c(2,2))
+plot(modeloutlier1)
+par(mfrow=c(1,1))
+## increased model fit
+
+outliers1 <- outlierTest(modeloutlier1)
+outliers1$bonf.p
+outliers1toremove <- as.numeric(names(outliers1$bonf.p))
+outliers1toremove[11:13]<-c(32166,144252,152837)
+
+
+spotifysongapplicable2 <- subset(spotifysongapplicable1, !(spotifysongapplicable1$rownames %in% outliers1toremove))
+detach(spotifysongapplicable1)
+```
+
+#### Outlier Removal round 3
+
+```{r echo=FALSE}
+attach(spotifysongapplicable2)
+modeloutlier2 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable2)
+
+summary(modeloutlier2)$r.sq  
+summary(modeloutlier2)$adj.r.sq
+sqrt(deviance(modeloutlier2)/df.residual(modeloutlier2))
+par(mfrow=c(2,2))
+plot(modeloutlier2)
+par(mfrow=c(1,1))
+
+outliers2 <- outlierTest(modeloutlier2)
+outliers2$bonf.p
+outliers2toremove <- as.numeric(names(outliers2$bonf.p))
+outliers2toremove[11:13]<-c(161469,32177,161467)
+
+spotifysongapplicable3 <- subset(spotifysongapplicable2, !(spotifysongapplicable2$rownames %in% outliers2toremove))
+detach(spotifysongapplicable2)
+```
+
+#### Outlier Removal round 4
+
+```{r echo=c(3,4,5,8)}
+attach(spotifysongapplicable3)
+modeloutlier3 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable3)
+
+summary(modeloutlier3)$r.sq 
+summary(modeloutlier3)$adj.r.sq
+sqrt(deviance(modeloutlier3)/df.residual(modeloutlier3))
+
+par(mfrow=c(2,2))
+plot(modeloutlier3)
+par(mfrow=c(1,1))
+
+outliers3 <- outlierTest(modeloutlier3)
+outliers3$bonf.p
+outliers3toremove <- as.numeric(names(outliers3$bonf.p))
+outliers3toremove[11:13]<-c(32144,23945,115834)
+
+spotifysongapplicable4 <- subset(spotifysongapplicable3, !(spotifysongapplicable3$rownames %in% outliers3toremove))
+detach(spotifysongapplicable3)
+```
+
+#### Outlier Removal round 5
+
+```{r echo=FALSE}
+attach(spotifysongapplicable4)
+modeloutlier4 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable4)
+
+summary(modeloutlier4)$r.sq
+summary(modeloutlier4)$adj.r.sq
+sqrt(deviance(modeloutlier4)/df.residual(modeloutlier4))
+
+par(mfrow=c(2,2))
+plot(modeloutlier4)
+
+outliers4 <- outlierTest(modeloutlier4)
+outliers4$bonf.p
+outliers4toremove <- as.numeric(names(outliers4$bonf.p))
+outliers4toremove[5:7]<-c(152879,55612,87949)
+
+spotifysongapplicable5 <- subset(spotifysongapplicable4, !(spotifysongapplicable4$rownames %in% outliers4toremove))
+detach(spotifysongapplicable4)
+```
+
+#### Outlier Removal Final
+
+```{r echo=FALSE}
+attach(spotifysongapplicable5)
+
+modeloutlier5 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable5)
+
+summary(modeloutlier5)$r.sq
+summary(modeloutlier5)$adj.r.sq
+sqrt(deviance(modeloutlier5)/df.residual(modeloutlier5))
+
+par(mfrow=c(2,2))
+plot(modeloutlier5)
+par(mfrow=c(1,1))
+outliers5 <- outlierTest(modeloutlier5)
+outliers5$signif
+
+#on the plots we still see some points that might need to be removed still yet the outlier test said there were no more outliers significant. So points that remain are influential points that might overly influence the model
+
+```
+
+#### Influential Point Removal 1
+
+```{r echo=c(5,6,7)}
+modeloutlier5 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifysongapplicable5)
+detach(spotifysongapplicable5)
+influencePlot(modeloutlier5)
+spotifyinfluentialpointremoval1 <- subset(spotifysongapplicable5, !(spotifysongapplicable5$rownames %in% c(40230,87267,152377,152632,161456)))
+
+modelinflupointremoval2 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyinfluentialpointremoval1)
+summary(modelinflupointremoval2)$r.sq
+summary(modelinflupointremoval2)$adj.r.sq
+sqrt(deviance(modelinflupointremoval2)/df.residual(modelinflupointremoval2))
+
+par(mfrow=c(2,2))
+plot(modelinflupointremoval2)
+par(mfrow=c(1,1))
+```
+
+#### Influential Point Removal 2
+
+```{r echo=c(6,7,8)}
+influencePlot(modelinflupointremoval2)
+spotifyinfluentialpointremoval2 <- subset(spotifyinfluentialpointremoval1, !(spotifyinfluentialpointremoval1$rownames %in% c(87841,161451,161455,87950,115622,54568,161450)))
+
+modelinflupointremoval3 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyinfluentialpointremoval2)
+
+summary(modelinflupointremoval3)$r.sq
+summary(modelinflupointremoval3)$adj.r.sq
+sqrt(deviance(modelinflupointremoval3)/df.residual(modelinflupointremoval3))
+par(mfrow=c(2,2))
+plot(modelinflupointremoval3)
+par(mfrow=c(1,1))
+```
+
+#### Influential Point Removal 3
+
+```{r echo=c(6,7,8)}
+influencePlot(modelinflupointremoval3)
+spotifyinfluentialpointremoval3 <- subset(spotifyinfluentialpointremoval2, !(spotifyinfluentialpointremoval2$rownames %in% c(87575,87853,87978,97714,77426)))
+
+modelinflupointremoval4 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyinfluentialpointremoval3)
+
+summary(modelinflupointremoval4)$r.sq
+summary(modelinflupointremoval4)$adj.r.sq
+sqrt(deviance(modelinflupointremoval4)/df.residual(modelinflupointremoval4))
+par(mfrow=c(2,2))
+plot(modelinflupointremoval4)
+par(mfrow=c(1,1))
+```
+
+#### Influential Point Removal 4
+
+```{r echo=c(6,7,8)}
+influencePlot(modelinflupointremoval4)
+spotifyinfluentialpointremoval4 <- subset(spotifyinfluentialpointremoval3, !(spotifyinfluentialpointremoval3$rownames %in% c(116548,87615,24157,87864,87953,116548)))
+
+modelinflupointremoval5 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyinfluentialpointremoval4)
+
+summary(modelinflupointremoval5)$r.sq
+summary(modelinflupointremoval5)$adj.r.sq
+sqrt(deviance(modelinflupointremoval5)/df.residual(modelinflupointremoval5))
+par(mfrow=c(2,2))
+plot(modelinflupointremoval5)
+par(mfrow=c(1,1))
+```
+
+#### Influential Point Removal 5
+
+```{r echo = c(6,7,8)}
+influencePlot(modelinflupointremoval5)
+spotifyinfluentialpointremoval5 <- subset(spotifyinfluentialpointremoval4, !(spotifyinfluentialpointremoval4$rownames %in% c(46884,87852,87970,107073,107068,87952)))
+
+modelinflupointremoval6 <- lm(popularity~durationmin + tempo + loudness + acousticness + danceability + energy + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyinfluentialpointremoval5)
+
+summary(modelinflupointremoval6)$r.sq
+summary(modelinflupointremoval6)$adj.r.sq
+sqrt(deviance(modelinflupointremoval6)/df.residual(modelinflupointremoval6))
+par(mfrow=c(2,2))
+plot(modelinflupointremoval6)
+par(mfrow=c(1,1))
+```
+
+#### Influential Point Removal Final
+
+```{r echo=TRUE}
+influencePlot(modelinflupointremoval6)
+
+spotifyremoved <- subset(spotifyinfluentialpointremoval5, select = c(popularity, durationmin, tempo, loudness, acousticness, danceability, energy, instrumentalness, valence, liveness, speechiness, key, mode, explicit, morethan1artist, rownames, name, artists))
+```
+
+#### Data Split into Training and Test Data
+
+```{r echo = FALSE}
+set.seed(1000)
+library(rsample)
+spotify_split <- initial_split(spotifyremoved, prop = 0.65, strata = popularity)
+
+spotifytraining <- training(spotify_split)
+spotify_test <- testing(spotify_split)
+
+attach(spotifytraining)
+```
+
+#### Correlation Plot
+
+```{r echo=FALSE}
+cormatrix <- cor(spotifytraining[1:11])
+corrplot.mixed(cormatrix, lower = 'number',tl.pos = 'lt', tl.srt = 60, tl.cex = 0.8, number.cex = 0.80, number.digits = 2, mar = c(1,1,0.0001,.00000001))
+```
+
+#### Variance Inflation
+
+```{r echo=c(2,3,5,6)}
+modelvif1 <- lm(popularity~ durationmin + tempo + acousticness + danceability + energy + loudness + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifytraining)
+vif(modelvif1)
+summary(modelvif1)$r.sq
+##loudness: 2.524341
+## energy: 3.480185
+
+##removal of energy
+modelvif2 <- lm(popularity~durationmin + tempo + acousticness + danceability + loudness + instrumentalness + valence + liveness + speechiness + key + mode + explicit + morethan1artist, data = spotifyremoved)
+vif(modelvif2)
+summary(modelvif2)$r.sq
+##multicolinearity settled by removal of energy
+```
+
+#### Interaction Plots
+##### Durationmin
+###### key
+There is some interaction between durationmin and keys that needs to be accounted for
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+colorstheme <- colorRamps::primary.colors()
+palette(colorstheme)
+
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(spotifytraining$durationmin, spotifytraining$popularity, col=key,xlab = "durationmin", ylab = "popularity", main = "interaction plot durationmin:key")
+abline(lm(popularity[key==0]~spotifytraining$durationmin[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~spotifytraining$durationmin[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~spotifytraining$durationmin[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~spotifytraining$durationmin[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~spotifytraining$durationmin[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~spotifytraining$durationmin[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~spotifytraining$durationmin[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~spotifytraining$durationmin[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~spotifytraining$durationmin[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~spotifytraining$durationmin[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~spotifytraining$durationmin[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~spotifytraining$durationmin[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+There is an interaction between mode and durationmin
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(spotifytraining$durationmin, popularity, col=mode, xlab = "spotifytraining$durationmin", ylab = "popularity", main = "interaction plot durationmin:mode")
+abline(lm(popularity[mode==0]~spotifytraining$duration[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~spotifytraining$duration[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+There is an interaction between durationmin and explicit
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(spotifytraining$duration, popularity, col=explicit, xlab = "durationmin", ylab = "popularity", main = "interaction plot durationmin:explicit")
+abline(lm(popularity[explicit==0]~spotifytraining$duration[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~spotifytraining$duration[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+There is an interaction between duration and more than 1 artist
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(spotifytraining$duration, popularity, col=c(1,2), xlab = "durationmin", ylab = "popularity", main = "interaction plot durationmin:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~spotifytraining$duration[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~spotifytraining$duration[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1, 2), xpd = TRUE)
+```
+
+##### tempo
+
+###### key
+
+almost parallel lines but will still include in full model
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(tempo, popularity, col=key, xlab = "tempo", ylab = "popularity", main = "interaction plot tempo:key")
+abline(lm(popularity[key==0]~tempo[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~tempo[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~tempo[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~tempo[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~tempo[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~tempo[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~tempo[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~tempo[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~tempo[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~tempo[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~tempo[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~tempo[key==11],data = spotifytraining), col=12, lwd=2)
+
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+no interaction
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(tempo, popularity, col=mode, xlab = "tempo", ylab = "popularity", main = "interaction plot tempo:mode")
+abline(lm(popularity[mode==0]~tempo[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~tempo[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+
+```
+
+###### explicit
+
+There is an interaction between tempo and explicit
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(tempo, popularity, col=explicit, xlab = "tempo", ylab = "popularity", main = "interaction plot tempo:explicit")
+abline(lm(popularity[explicit==0]~tempo[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~tempo[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+small interaction between tempo and morethan1artist
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(tempo, popularity, col=c(1,2), xlab = "tempo", ylab = "popularity", main = "interaction plot tempo:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~tempo[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~tempo[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c("black", "red"), xpd = TRUE)
+```
+
+##### Loudness
+
+###### Key
+
+There is an interaction with Key and loudness
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,9), xpd = FALSE)
+plot(loudness, popularity, col=key, xlab = "loudness", ylab = "popularity", main = "interaction plot loudness:key")
+abline(lm(popularity[key==0]~loudness[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~loudness[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~loudness[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~loudness[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~loudness[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~loudness[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~loudness[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~loudness[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~loudness[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~loudness[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~loudness[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~loudness[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+No interaction between mode and loudness
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,9), xpd = FALSE)
+plot(loudness, popularity, col=mode, xlab = "loudness", ylab = "popularity", main = "interaction plot loudness:mode")
+abline(lm(popularity[mode==0]~loudness[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~loudness[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+small interaction between explicit and loudness
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(loudness, popularity, col=explicit, xlab = "loudness", ylab = "popularity", main = "interaction plot loudness:explicit")
+abline(lm(popularity[explicit==0]~loudness[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~loudness[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1, 2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+small interaction between morethan1artist and loudness
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(loudness, popularity, col=c(1,2), xlab = "loudness", ylab = "popularity", main = "interaction plot loudness:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~loudness[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~loudness[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### Acousticness
+
+###### key
+
+small interaction between acousticness and key
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(acousticness, popularity, col=key, xlab = "acousticness", ylab = "popularity", main = "interaction plot acousticness:key")
+abline(lm(popularity[key==0]~acousticness[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~acousticness[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~acousticness[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~acousticness[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~acousticness[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~acousticness[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~acousticness[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~acousticness[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~acousticness[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~acousticness[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~acousticness[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~acousticness[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+small interaction between mode and acousticness
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(acousticness, popularity, col=mode, xlab = "acousticness", ylab = "popularity", main = "interaction plot acousticness:mode")
+abline(lm(popularity[mode==0]~acousticness[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~acousticness[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+
+```
+
+###### explicit
+
+parallel lines so no interaction between acousticness and explicit
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(acousticness, popularity, col=explicit, xlab = "acousticness", ylab = "popularity", main = "interaction plot acousticness:explicit")
+abline(lm(popularity[explicit==0]~acousticness[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~acousticness[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+almost no interaction or difference will not include in full model
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(acousticness, popularity, col=c(1,2), xlab = "acousticness", ylab = "popularity", main = "interaction plot acousticness:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~acousticness[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~acousticness[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### Danceability
+
+###### key
+
+There is an interaction between danceability and key
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(danceability, popularity, col=key, xlab = "danceability", ylab = "popularity", main = "interaction plot danceability:key")
+abline(lm(popularity[key==0]~danceability[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~danceability[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~danceability[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~danceability[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~danceability[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~danceability[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~danceability[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~danceability[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~danceability[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~danceability[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~danceability[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~danceability[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+Interaction is present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(danceability, popularity, col=mode, xlab = "danceability", ylab = "popularity", main = "interaction plot danceability:mode")
+abline(lm(popularity[mode==0]~danceability[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~danceability[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+parallel lines so no interactions
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(danceability, popularity, col=explicit, xlab = "danceability", ylab = "popularity", main = "interaction plot danceability:explicit")
+abline(lm(popularity[explicit==0]~danceability[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~danceability[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+small interaction to include
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(danceability, popularity, col=c(1,2), xlab = "danceability", ylab = "popularity", main = "interaction plot danceability:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~danceability[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~danceability[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### instrumentalness
+
+###### key
+
+interaction present between instrumentalness and key
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(instrumentalness, popularity, col=key, xlab = "instrumentalness", ylab = "popularity", main = "interaction plot instrumentalness:key")
+abline(lm(popularity[key==0]~instrumentalness[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~instrumentalness[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~instrumentalness[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~instrumentalness[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~instrumentalness[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~instrumentalness[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~instrumentalness[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~instrumentalness[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~instrumentalness[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~instrumentalness[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~instrumentalness[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~instrumentalness[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+small interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(instrumentalness, popularity, col=mode, xlab = "instrumentalness", ylab = "popularity", main = "interaction plot instrumentalness:mode")
+abline(lm(popularity[mode==0]~instrumentalness[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~instrumentalness[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(instrumentalness, popularity, col=explicit, xlab = "instrumentalness", ylab = "popularity", main = "interaction plot instrumentalness:explicit")
+abline(lm(popularity[explicit==0]~instrumentalness[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~instrumentalness[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+interaction is present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(instrumentalness, popularity, col=c(1,2), xlab = "instrumentalness", ylab = "popularity", main = "interaction plot instrumentalness:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~instrumentalness[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~instrumentalness[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### valence
+
+###### key
+
+some interactions present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(valence, popularity, col=key, xlab = "valence", ylab = "popularity", main = "interaction plot valence:key")
+abline(lm(popularity[key==0]~valence[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~valence[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~valence[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~valence[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~valence[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~valence[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~valence[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~valence[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~valence[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~valence[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~valence[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~valence[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+some interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(valence, popularity, col=mode, xlab = "valence", ylab = "popularity", main = "interaction plot valence:mode")
+abline(lm(popularity[mode==0]~valence[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~valence[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+no interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(valence, popularity, col=explicit, xlab = "valence", ylab = "popularity", main = "interaction plot valence:explicit")
+abline(lm(popularity[explicit==0]~valence[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~valence[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+very small interaction
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(valence, popularity, col=c(1,2), xlab = "valence", ylab = "popularity", main = "interaction plot valence:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~valence[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~valence[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "2+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### liveness
+
+###### key
+
+small interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(liveness, popularity, col=key, xlab = "liveness", ylab = "popularity", main = "interaction plot liveness:key")
+abline(lm(popularity[key==0]~liveness[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~liveness[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~liveness[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~liveness[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~liveness[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~liveness[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~liveness[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~liveness[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~liveness[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~liveness[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~liveness[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~liveness[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+small interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(liveness, popularity, col=mode, xlab = "liveness", ylab = "popularity", main = "interaction plot liveness:mode")
+abline(lm(popularity[mode==0]~liveness[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~liveness[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+small interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(liveness, popularity, col=explicit, xlab = "liveness", ylab = "popularity", main = "interaction plot liveness:explicit")
+abline(lm(popularity[explicit==0]~liveness[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~liveness[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+small interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(liveness, popularity, col=c(1,2), xlab = "liveness", ylab = "popularity", main = "interaction plot liveness:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~liveness[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~liveness[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+##### speechiness
+
+###### key
+
+Definite interaction present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(speechiness, popularity, col=key, xlab = "speechiness", ylab = "popularity", main = "interaction plot speechiness:key")
+abline(lm(popularity[key==0]~speechiness[key==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[key==1]~speechiness[key==1],data = spotifytraining), col=2, lwd=2)
+abline(lm(popularity[key==2]~speechiness[key==2],data = spotifytraining), col=3, lwd=2)
+abline(lm(popularity[key==3]~speechiness[key==3],data = spotifytraining), col=4, lwd=2)
+abline(lm(popularity[key==4]~speechiness[key==4],data = spotifytraining), col=5, lwd=2)
+abline(lm(popularity[key==5]~speechiness[key==5],data = spotifytraining), col=6, lwd=2)
+abline(lm(popularity[key==6]~speechiness[key==6],data = spotifytraining), col=7, lwd=2)
+abline(lm(popularity[key==7]~speechiness[key==7],data = spotifytraining), col=8, lwd=2)
+abline(lm(popularity[key==8]~speechiness[key==8],data = spotifytraining), col=9, lwd=2)
+abline(lm(popularity[key==9]~speechiness[key==9],data = spotifytraining), col=10, lwd=2)
+abline(lm(popularity[key==10]~speechiness[key==10],data = spotifytraining), col=11, lwd=2)
+abline(lm(popularity[key==11]~speechiness[key==11],data = spotifytraining), col=12, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "Cb"), fill = c(1,2,3,4,5,6,7,8,9,10,11,12), xpd = TRUE)
+```
+
+###### mode
+
+interaction is present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(speechiness, popularity, col=mode, xlab = "speechiness", ylab = "popularity", main = "interaction plot speechiness:mode")
+abline(lm(popularity[mode==0]~speechiness[mode==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[mode==1]~speechiness[mode==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("Minor", "Major"), fill = c(1,2), xpd = TRUE)
+```
+
+###### explicit
+
+interaction is present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(speechiness, popularity, col=explicit, xlab = "speechiness", ylab = "popularity", main = "interaction plot speechiness:explicit")
+abline(lm(popularity[explicit==0]~speechiness[explicit==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[explicit==1]~speechiness[explicit==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("not explicit", "explicit"), fill = c(1,2), xpd = TRUE)
+```
+
+###### morethan1artist
+
+interaction is present
+
+```{r echo=FALSE}
+par(mar = c(5,4,4,8), xpd = FALSE)
+plot(speechiness, popularity, col=c(1,2), xlab = "speechiness", ylab = "popularity", main = "interaction plot speechiness:morethan1artist")
+abline(lm(popularity[morethan1artist==0]~speechiness[morethan1artist==0],data = spotifytraining), col=1, lwd=2)
+abline(lm(popularity[morethan1artist==1]~speechiness[morethan1artist==1],data = spotifytraining), col=2, lwd=2)
+legend("topright", inset = c(-0.2,0), legend = c("1 artist", "1+ artists"), fill = c(1,2), xpd = TRUE)
+```
+
+#### Interaction Terms
+
+##### Full Interaction Start
+```{r echo=FALSE}
+modelfullinteraction <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                              + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key + danceability:mode 
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode + instrumentalness:explicit
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist + liveness:mode + liveness:explicit
+                             + speechiness:key + speechiness:morethan1artist + speechiness:mode + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelfullinteraction)$r.sq 
+summary(modelfullinteraction)$adj.r.sq
+sqrt(deviance(modelfullinteraction)/df.residual(modelfullinteraction))
+par(mfrow=c(2,2))
+plot(modelfullinteraction)
+```
+
+##### Interaction Term Removal 1
+removal of speechiness:mode
+```{r echo=FALSE}
+modelinteraction1 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                              + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key + danceability:mode 
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode + instrumentalness:explicit
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist + liveness:mode + liveness:explicit
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction1)$r.sq
+summary(modelinteraction1)$adj.r.sq 
+sqrt(deviance(modelinteraction1)/df.residual(modelinteraction1))
+par(mfrow=c(2,2))
+plot(modelinteraction1)
+```
+
+##### Interaction Term Removal 2
+removal of danceability:mode
+```{r echo=FALSE}
+modelinteraction2 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                      + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode + instrumentalness:explicit
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist + liveness:mode + liveness:explicit
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction2)$r.sq
+summary(modelinteraction2)$adj.r.sq 
+sqrt(deviance(modelinteraction2)/df.residual(modelinteraction2))
+par(mfrow=c(2,2))
+plot(modelinteraction2)
+```
+
+##### Interaction Term Removal 3
+removal of instrumental:explicit
+```{r echo=FALSE}
+modelinteraction3 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                      + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist + liveness:mode + liveness:explicit
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction3)$r.sq
+summary(modelinteraction3)$adj.r.sq 
+sqrt(deviance(modelinteraction3)/df.residual(modelinteraction3))
+par(mfrow=c(2,2))
+plot(modelinteraction3)
+```
+
+##### Interaction Term Removal 4
+removal of liveness:mode
+```{r echo=FALSE}
+modelinteraction4 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                      + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist + liveness:explicit
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction4)$r.sq
+summary(modelinteraction4)$adj.r.sq 
+sqrt(deviance(modelinteraction4)/df.residual(modelinteraction4))
+par(mfrow=c(2,2))
+plot(modelinteraction4)
+```
+
+##### Interaction Term Removal 5
+removal of liveness:explicit
+
+```{r echo=FALSE}
+modelinteraction5 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                      + loudness:key + loudness:morethan1artist + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction5)$r.sq
+summary(modelinteraction5)$adj.r.sq 
+sqrt(deviance(modelinteraction5)/df.residual(modelinteraction5))
+par(mfrow=c(2,2))
+plot(modelinteraction5)
+```
+
+##### Interaction Term Removal 6
+Removal of loudness:morethan1artist
+
+```{r echo=FALSE}
+modelinteraction6 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                          + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist + instrumentalness:mode
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction6)$r.sq
+summary(modelinteraction6)$adj.r.sq 
+sqrt(deviance(modelinteraction6)/df.residual(modelinteraction6))
+par(mfrow=c(2,2))
+plot(modelinteraction6)
+```
+
+##### Interaction Term Removal 7
+Removal of instrumentalness:mode
+```{r echo=FALSE}
+modelinteraction7 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:morethan1artist + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                          + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction7)$r.sq
+summary(modelinteraction7)$adj.r.sq 
+sqrt(deviance(modelinteraction7)/df.residual(modelinteraction7))
+par(mfrow=c(2,2))
+plot(modelinteraction7)
+```
+
+##### Interaction Term Removal 8
+Removal of spotifytraining$duration:morethan1artist
+R.sq:0.1275 and adj.R.sq:0.1187 and RSE:8.98
+```{r echo=FALSE}
+modelinteraction8 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:key + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction8)$r.sq
+summary(modelinteraction8)$adj.r.sq 
+sqrt(deviance(modelinteraction8)/df.residual(modelinteraction8))
+par(mfrow=c(2,2))
+plot(modelinteraction8)
+```
+
+##### Interaction Term Removal 9
+Removal of liveness:key
+R.sq:0.1272 and adj.R.sq:0.1191 and RSE:8.978
+```{r echo=c(2,4)}
+modelinteraction9 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key + instrumentalness:morethan1artist 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction9)$r.sq## 0.1311 and 0.123 and RSE:8.862
+par(mfrow=c(2,2))
+plot(modelinteraction9)
+```
+ 
+##### Interaction Term Removal 10
+Removal of instrumentalness:morethan1artist1
+R.sq:0.1271 and adj.R.sq:0.1191 and RSE:8.978
+```{r echo=FALSE}
+modelinteraction10 <- lm(popularity ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelinteraction10)$r.sq
+par(mfrow=c(2,2))
+plot(modelinteraction10)
+##when spotifytraining$duration:explicit, tempo:morethan1artist, and instrumentalness:morethan1artist were removed they all decresed the r-sqed values and increased the RSE instead of minimizing it so we end on modelinteraction10 for transformations
+
+```
+#### Transformations
+##### Popularity
+R.sq:0.1264 and adj.R.sq:0.1184 and RSE:0.5814
+```{r echo=FALSE}
+modelsqrtresp <- lm(sqrt(popularity) ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + instrumentalness + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + instrumentalness:key 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelsqrtresp)$r.sq
+par(mfrow=c(2,2))
+plot(modelsqrtresp)
+```
+
+##### Instrumentalness
+R-squared:  0.1268,	Adjusted R-squared:  0.1188, RSE:  0.5813
+```{r echo=FALSE}
+modelsqrtinst <- lm(sqrt(popularity) ~ spotifytraining$duration + tempo + loudness + acousticness + danceability + sqrt(instrumentalness) + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + sqrt(instrumentalness):key 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit, data = spotifytraining, na.action = 'na.fail')
+summary(modelsqrtinst)$r.sq
+par(mfrow=c(2,2))
+plot(modelsqrtinst)
+
+##final model before variable selection
+
+modelvarselection <- modelsqrtinst
+```
+
+#### Variable Selection
+
+##### Forward
+
+###### AIC
+
+```{r echo=c(3,4,5,7)}
+modintonlyAIC <- lm(sqrt(popularity)~1,data=spotifytraining)  # intercept only model
+forwardAIC <- step(modintonlyAIC,scope=list(lower=~1, 
+                                   upper=~ spotifytraining$duration + tempo + loudness + acousticness + danceability + sqrt(instrumentalness) + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + sqrt(instrumentalness):key 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit),
+                   direction="forward", data=spotifytraining) ## 20 predicors
+anova(forwardAIC)
+forwardAIC$coefficients
+extractAIC(forwardAIC)
+summary(forwardAIC)$r.squared
+
+```
+
+###### BIC
+
+```{r echo=c(4,5,6,7)}
+n <- length(modelvarselection$residuals)
+modintonlyBIC <- lm(sqrt(popularity)~1,data=spotifytraining)  # intercept only model
+forwardBIC <- step(modintonlyBIC,scope=list(lower=~1, 
+                                   upper=~ spotifytraining$duration + tempo + loudness + acousticness + danceability + sqrt(instrumentalness) + valence + liveness + speechiness + key + morethan1artist + mode + explicit  
+                             + spotifytraining$duration:key + spotifytraining$duration:mode + spotifytraining$duration:explicit 
+                             + tempo:key + tempo:morethan1artist + tempo:explicit                                         + loudness:key + loudness:explicit 
+                             + acousticness:key + acousticness:mode  
+                             + danceability:key
+                             + sqrt(instrumentalness):key 
+                             + valence:key + valence:morethan1artist + valence:mode 
+                             + liveness:morethan1artist
+                             + speechiness:key + speechiness:morethan1artist + speechiness:explicit),
+                   direction="forward", data=spotifytraining, k=log(n))
+anova(forwardBIC)
+summary(forwardBIC)$r.sq
+summary(forwardBIC)$adj.r.sq 
+extractAIC(forwardBIC)
+
+```
+
+##### Backwards
+
+###### AIC
+
+```{r echo=c(2,3,4,5)}
+backAIC <- step(modelvarselection,direction="backward", data=spotifytraining)
+
+anova(backAIC)
+summary(backAIC)$r.sq 
+summary(backAIC)$adj.r.sq 
+extractAIC(backAIC)
+```
+
+###### BIC
+
+```{r echo=c(2,3,4,5)}
+backBIC <- step(modelvarselection,direction="backward", data=spotifytraining, k=log(n))
+
+anova(backBIC)
+summary(backBIC)$r.sq 
+summary(backBIC)$adj.r.sq
+extractAIC(backBIC)
+```
+
+##### Stepwise
+
+###### AIC
+
+```{r echo=c(2,3,4,5,6)}
+stepwiseAIC <- step(modelvarselection,direction="both", data=spotifytraining, k=2)
+
+anova(stepwiseAIC)
+summary(stepwiseAIC)$coefficients[,"Estimate"]
+summary(stepwiseAIC)$r.sq 
+summary(stepwiseAIC)$adj.r.sq 
+extractAIC(stepwiseAIC)
+plot(stepwiseAIC)
+```
+
+###### BIC
+   
+```{r echo=c(2,3,4,5)}
+stepwiseBIC <- step(modelvarselection,direction="both", data=spotifytraining, k=log(n))
+
+anova(stepwiseBIC)
+summary(stepwiseBIC)$r.sq 
+summary(stepwiseBIC)$adj.r.sq 
+extractAIC(stepwiseBIC)
+
+detach(spotifytraining)
+```
+
+### Testing model against testing data
+
+```{r}
+
+modeltest <- lm(sqrt(spotify_test$popularity) ~ spotify_test$durationmin + spotify_test$tempo + spotify_test$loudness + spotify_test$acousticness + 
+    spotify_test$danceability + sqrt(spotify_test$instrumentalness) + spotify_test$valence + spotify_test$liveness + 
+    spotify_test$speechiness + spotify_test$key + spotify_test$morethan1artist + spotify_test$mode + spotify_test$explicit
+    + spotify_test$durationmin:spotify_test$mode + spotify_test$tempo:spotify_test$explicit + spotify_test$loudness:spotify_test$explicit: spotify_test$acousticness:spotify_test$mode + spotify_test$danceability:spotify_test$key +
+    spotify_test$valence:spotify_test$morethan1artist + spotify_test$valence:spotify_test$mode + 
+    spotify_test$speechiness:spotify_test$key + spotify_test$speechiness:spotify_test$morethan1artist + spotify_test$speechiness:spotify_test$explicit, data = spotify_test)
+
+summary(modeltest)
+par(mfrow=c(2,2))
+plot(modeltest)
+```
